@@ -7,8 +7,8 @@ USAGE
 1. Apply General Scene Time Warp:
 	Adds a timewarp to the complete scene. Use this as well to reset to an ordinary timewarp,
 	which does not change the timing. 
-2. Select Retime Value File:
-	Browse to the location where the nuke artist stored his retime value file. This file is supposed to be
+2. Select Substance Value File:
+	Browse to the location where the nuke artist stored his Substance value file. This file is supposed to be
 	a simple text file containing 1. the new frame, 2. the old frame.
 3. (Optional) List Values:
 	Lists the content of the file in the script editor.
@@ -21,7 +21,6 @@ USAGE
 	
 
 '''
-
 import maya.cmds as cmds
 import maya.mel as mel
 from functools import partial 
@@ -45,7 +44,7 @@ def cHelp(*args):
 	if cmds.window('win_tkAssembleSubstanceHelp', exists=1):
 		cmds.deleteUI('win_tkAssembleSubstanceHelp')
 	myWindow = cmds.window('win_tkAssembleSubstanceHelp', s=1, t='help', wh=[200, 200])
-	helpText = '\nWHAT FOR\n	Adds a scene timewarp to the complete scene. \n\nUSAGE\n1. Apply General Scene Time Warp:\n	Adds a timewarp to the complete scene. Use this as well to reset to an ordinary timewarp,\n	which does not change the timing. \n2. Select Retime Value File:\n	Browse to the location where the nuke artist stored his retime value file. This file is supposed to be\n	a simple text file containing 1. the new frame, 2. the old frame.\n3. (Optional) List Values:\n	Lists the content of the file in the script editor.\n4. Apply (Float) Values To Time Warp:\n	Replaces the ordinary timewarp curve with the collected values in the file. \n	OR\n4. Apply (Int) Values To Time Warp:\n	Replaces the ordinary timewarp curve with the found values in the file, \n	but rounds the frames to full frames. That way we keep the full frames of the image plane sequences. \n	'
+	helpText = '\nWHAT FOR\n	Adds a scene timewarp to the complete scene. \n\nUSAGE\n1. Apply General Scene Time Warp:\n	Adds a timewarp to the complete scene. Use this as well to reset to an ordinary timewarp,\n	which does not change the timing. \n2. Select Substance Value File:\n	Browse to the location where the nuke artist stored his Substance value file. This file is supposed to be\n	a simple text file containing 1. the new frame, 2. the old frame.\n3. (Optional) List Values:\n	Lists the content of the file in the script editor.\n4. Apply (Float) Values To Time Warp:\n	Replaces the ordinary timewarp curve with the collected values in the file. \n	OR\n4. Apply (Int) Values To Time Warp:\n	Replaces the ordinary timewarp curve with the found values in the file, \n	but rounds the frames to full frames. That way we keep the full frames of the image plane sequences. \n	'
 	cmds.columnLayout(adj=1)
 	cmds.text(helpText, al='left')
 	cmds.showWindow(myWindow )
@@ -68,7 +67,7 @@ def cApplySceneTimeWarp(action, *args):
 
 
 
-def cRetimeFile(action, type, *args):
+def cBrowseSubstanceTex(*args):
 	timewarp = 'timewarp'
 	global tkFileList
 	if action == 'read':
@@ -78,8 +77,8 @@ def cRetimeFile(action, type, *args):
 	if action == 'list':
 		f=open(tkFileList[0], "r")
 		if f.mode == 'r':
-			retimeValues = f.read()
-			print retimeValues
+			SubstanceValues = f.read()
+			print SubstanceValues
 
 
 	if action == 'apply': 
@@ -94,10 +93,10 @@ def cRetimeFile(action, type, *args):
 		
 		f=open(tkFileList[0], "r")
 		if f.mode == 'r':
-			retimeValues = f.read().split()
-			for retValue in range (0, len(retimeValues), 2):
-				time = float(retimeValues[retValue])
-				value = float(retimeValues[(retValue +1)])
+			SubstanceValues = f.read().split()
+			for retValue in range (0, len(SubstanceValues), 2):
+				time = float(SubstanceValues[retValue])
+				value = float(SubstanceValues[(retValue +1)])
 				# print time
 				# print value
 				if (type == 'float'):
@@ -127,6 +126,9 @@ def cBrowseFiles():
 	return tkFileList
 
 
+def tkFillField(field, *args):
+	mySel = cmds.ls(sl=1, l=1)
+	cmds.textField(field, tx=mySel, e=1)
 
 
 
@@ -137,22 +139,16 @@ def tkAssembleSubstanceUI(*args):
 	myWindow = cmds.window('win_tkAssembleSubstance', t='tkAssembleSubstance ' + str(ver), s=1)
 
 	cmds.columnLayout(adj=1, bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
-	cmds.frameLayout('flRetime', l='Retime', bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]), cll=1, cl=0, cc='cShrinkWin("win_tkAssembleSubstance")')
+	cmds.frameLayout('flSubstance', l='Substance', bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]), cll=1, cl=0, cc='cShrinkWin("win_tkAssembleSubstance")')
 
-	cmds.rowColumnLayout(bgc=(colSilverDark[0], colSilverDark[1], colSilverDark[1]), nc=2, cw=[(1,100), (2,200)])
-
-	cmds.button(l='Select Time Warp', c=partial(cApplySceneTimeWarp, 'select'), bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
-	cmds.button(l='Apply General Scene Time Warp', c=partial(cApplySceneTimeWarp, 'apply'), bgc=(colSilverLight[0], colSilverLight[1], colSilverLight[2]))
+	cmds.rowColumnLayout(nc=3, cw=[(1, 120), (2, 240), (3, 120)])
+	cmds.button(l='Models >>', c=partial(tkFillField, 'tfModelName'), bgc=(colBlue[0], colBlue[1], colBlue[2]))
+	cmds.textField('tfModelName', ed=1)
 	cmds.setParent('..')
 
-	cmds.rowColumnLayout(bgc=(colSilverDark[0], colSilverDark[1], colSilverDark[1]), nc=2, cw=[(1,150), (2,150)])
-	cmds.button(l='Select Retime Value File', c=partial(cRetimeFile, 'read'), bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
-	cmds.button(l='List Values', c=partial(cRetimeFile, 'list'), bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
-	cmds.setParent('..')
+	cmds.button(l='Browse Substance Texture Files', c=partial(cBrowseSubstanceTex, 'select'), bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
 
-	cmds.button(l='Apply (Float) Values To Time Warp', c=partial(cRetimeFile, 'apply', 'float'), bgc=(colSilverLight[0], colSilverLight[1], colSilverLight[2]))
-	cmds.button(l='Apply (Int) Values To Time Warp', c=partial(cRetimeFile, 'apply', 'int'), bgc=(colSilverLight[0], colSilverLight[1], colSilverLight[2]))
-	cmds.button(l='Help', c=partial(cHelp), bgc=(colSilverDark[0], colSilverDark[1], colSilverDark[2]))
+
 
 
 
