@@ -25,7 +25,7 @@ import maya.cmds as cmds
 import maya.mel as mel
 from functools import partial 
 
-ver = 0.2
+ver = 0.1
 
 colDarkGrey			= [0.1, 0.1, 0.1]
 colSilverLight 		= [0.39, 0.46, 0.50]
@@ -49,86 +49,100 @@ def cHelp(*args):
 	cmds.text(helpText, al='left')
 	cmds.showWindow(myWindow )
 
+
 def cShrinkWin(windowToClose, *args):
-	cmds.window(windowToClose, e=1, h=20, w=300)
+	cmds.window(windowToClose, e=1, h=20, w=360)
 
 
-def cApplySceneTimeWarp(action, *args):
-	if action == 'apply':
-		if cmds.objExists('timewarp'):
-			cmds.delete('timewarp')
-			print 'deleted old timewarp'
-		cmds.AddTimeWarp()
-
-	if action == 'select':
-		cmds.select('timewarp', r=1)
+def tkDeleteUnusedShadingNodes(*args):
+	mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
 		
 
-
-
-
-def cBrowseSubstanceTex(*args):
-	timewarp = 'timewarp'
+def cSubstanceTex(action, *args):
 	global tkFileList
-	if action == 'read':
+	objList = []
+	objList = cmds.textField('tfModelName', tx=1, q=1).split()
+	if action == 'browse':
 		cBrowseFiles()
+		print 'Found Textures:'
+		for file in tkFileList: 
+			print file.split('/')[-1]
+		cSubstanceTex('build')
 
 
-	if action == 'list':
-		f=open(tkFileList[0], "r")
-		if f.mode == 'r':
-			SubstanceValues = f.read()
-			print SubstanceValues
+	if action == 'build':
+		shdName = tkFileList[0].split('/')[-1].split('_')[0]
+		print shdName
+		shader = cmds.shadingNode('aiStandardSurface', asShader=1, n=shdName + '_SHD')
+		SG = cmds.createNode('shadingEngine', name=shdName + '_SG')
+		cmds.connectAttr(shader + '.outColor', SG + '.surfaceShader', f=1)
+		cmds.connectAttr(SG + '.partition', 'renderPartition.sets', na=1)
+		for obj in objList:
+			print obj
+			cmds.select(obj, r=1)
+			cmds.sets(forceElement=SG, e=1)
 
+		for tex in tkFileList:
+			texName = tex.split('/')[-1].split('.')[0]
+			file = cmds.shadingNode('file', asTexture=1, isColorManaged=1, n='Height')
+			cmds.setAttr(file + '.ftn', tex, type = 'string')
+			cmds.setAttr(file + '.colorSpace', 'sRGB', type = 'string')
+			cmds.setAttr(file + '.filterType', 0)
+			cmds.setAttr(file + '.alphaIsLuminance', 1)
 
-	if action == 'apply': 
-		cApplySceneTimeWarp('apply')
-		cmds.select(clear=1) 
-		numKeys = cmds.keyframe(timewarp, kc=1, q=1) 
-		timeLast = cmds.keyframe("timewarp", q=True)[-1] 
-		timeFirst =	cmds.keyframe("timewarp", q=True)[0] 
-		cmds.setKeyframe(timewarp, t=-1000, v=-1000)
-		cmds.cutKey('timewarp',	time=(timeLast,timeLast)) 
-		cmds.cutKey('timewarp', time=(timeFirst,timeFirst))
-		
-		f=open(tkFileList[0], "r")
-		if f.mode == 'r':
-			SubstanceValues = f.read().split()
-			for retValue in range (0, len(SubstanceValues), 2):
-				time = float(SubstanceValues[retValue])
-				value = float(SubstanceValues[(retValue +1)])
-				# print time
-				# print value
-				if (type == 'float'):
-					# print 'float'
-					cmds.setKeyframe(timewarp, t=time, v=value)
-				if (type == 'int'):
-					# print 'int'
-					intFrame = int(round(time,0))
-					intValue = int(round(value,0))
-					# print intValue
-					# print 'intValue:'
-					cmds.setKeyframe(timewarp, t=intFrame, v=intValue)
+			if 'Height' in texName or 'Displacement' in texName:
+				print 'height'
+				displacementShader = cmds.shadingNode('displacementShader', asShader=1)
+				cmds.connectAttr(file + '.outAlpha', displacementShader + '.displacement', f=1)
+				cmds.connectAttr(displacementShader + '.displacement', SG + '.displacementShader', f=1)
 
-			
-		cmds.cutKey('timewarp', time=(-1000,-1000))
-		
-		cmds.select(timewarp, r=1)
-		cmds.keyTangent(itt='linear', ott='linear')
+			if 'Normal' in texName:
+				bump = cmds.shadingNode('bump2d', asUtility=1)
+				cmds.setAttr(bump + '.bumpInterp', 1)
+				cmds.connectAttr(file + '.outAlpha', bump + '.bumpValue', f=1)
+				cmds.connectAttr(bump + '.outNormal', shader + '.normalCamera', f=1)
+
+			if 'Base_Color' in texName or 'Albedo' in texName:
+				cmds.connectAttr(file + '.outColor', shader + '.baseColor', f=1)
+
+			if 'Metallic' in texName:
+				cmds.connectAttr(file + '.outAlpha', shader + '.metalness', f=1)
+
+			if 'Roughness' in texName:
+				cmds.connectAttr(file + '.outAlpha', shader + '.specularRoughness', f=1)
+
+			if 'Opacity' in texName:
+				cmds.connectAttr(file + '.outColor', shader + '.opacity', f=1)
+				for obj in objList:
+					shapes = cmds.listRelatives(obj, s=1, type='mesh')
+					for shp in shapes:
+						cmds.setAttr(shp + '.aiOpaque', 0) 
+
+			if 'Translucency' in texName:
+				cmds.connectAttr(file + '.outColor', shader + '.transmissionColor', f=1)
+				cmds.setAttr(shader + '.transmission', 1) 
+				for obj in objList:
+					shapes = cmds.listRelatives(obj, shape=1, type='mesh')
+					for shp in shapes:
+						cmds.setAttr(shp + '.aiOpaque', 0) 
 
 
 
 def cBrowseFiles():
 	global tkFileList
 	ws = cmds.workspace(fn=1)
-	ws = ws + '/data'
-	tkFileList = cmds.fileDialog2(dir=ws, fm=4)
+	ws = ws + '/substance/aphrodite'
+	tkFileList = cmds.fileDialog2(dir=ws, okc='Select', fm=4)
 	return tkFileList
 
 
 def tkFillField(field, *args):
+	strList = ''
 	mySel = cmds.ls(sl=1, l=1)
-	cmds.textField(field, tx=mySel, e=1)
+	for sel in mySel:
+		strList += sel + ' '
+	
+	cmds.textField(field, tx=strList, e=1)
 
 
 
@@ -141,12 +155,15 @@ def tkAssembleSubstanceUI(*args):
 	cmds.columnLayout(adj=1, bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
 	cmds.frameLayout('flSubstance', l='Substance', bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]), cll=1, cl=0, cc='cShrinkWin("win_tkAssembleSubstance")')
 
-	cmds.rowColumnLayout(nc=3, cw=[(1, 120), (2, 240), (3, 120)])
-	cmds.button(l='Models >>', c=partial(tkFillField, 'tfModelName'), bgc=(colBlue[0], colBlue[1], colBlue[2]))
+	cmds.rowColumnLayout(nc=2, cw=[(1, 120), (2, 240)])
+	cmds.button(l='Models >>', c=partial(tkFillField, 'tfModelName'), bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
 	cmds.textField('tfModelName', ed=1)
 	cmds.setParent('..')
 
-	cmds.button(l='Browse Substance Texture Files', c=partial(cBrowseSubstanceTex, 'select'), bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
+	cmds.button(l='Browse And Assign Substance Texture Files', c=partial(cSubstanceTex, 'browse'), bgc=(colSilverLight[0], colSilverLight[1], colSilverLight[2]))
+	cmds.button(l='Delete Unused SHD', c=partial(tkDeleteUnusedShadingNodes), bgc=(colSilverMid[0], colSilverMid[1], colSilverMid[2]))
+
+	# cmds.button(l='Browse And Assign Substance Texture Files', c=partial(cSubstanceTex, 'browse'), bgc=(colSilverLight[0], colSilverLight[1], colSilverLight[2]))
 
 
 
